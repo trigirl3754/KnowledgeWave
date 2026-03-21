@@ -1,0 +1,21 @@
+.sidebar {
+  width: 200px;
+  background: #f4f4f4;
+  padding: 1rem;
+  border-right: 1px solid #ccc;
+}
+
+.widget {
+  position: absolute;
+  left: 220px;
+  top: 50px;
+  width: 300px;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.actions button {
+  margin-right: 8px;
+}
