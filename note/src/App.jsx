@@ -4,6 +4,7 @@ import Sidebar from "./components/Sidebar";
 import KeywordWidget from "./components/KeywordWidget";
 import KnowledgeGraph from "./components/KnowledgeGraph";
 import GlossaryPanel from "./components/GlossaryPanel";
+import { getSnippets } from "./config/api";
 
 function App() {
   const [selectedKeyword, setSelectedKeyword] = useState(null);
@@ -15,6 +16,25 @@ function App() {
   useEffect(() => {
     localStorage.setItem("snippets", JSON.stringify(snippets));
   }, [snippets]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const remoteSnippets = await getSnippets();
+        if (isMounted && remoteSnippets && Object.keys(remoteSnippets).length) {
+          setSnippets(remoteSnippets);
+        }
+      } catch {
+        // Keep local storage snippets when API is not available.
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">

@@ -1,7 +1,12 @@
 // KeywordWidget.js
 import React, { useEffect, useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import axios from "axios";
+import {
+  analyzeSnippetText,
+  deleteSnippet,
+  generateSuggestion,
+  saveSnippet,
+} from "../config/api";
 
 export default function KeywordWidget({
   keyword,
@@ -21,6 +26,7 @@ export default function KeywordWidget({
   );
 
   const [local, setLocal] = useState(existing);
+  const [aiSummary, setAiSummary] = useState(null);
 
   useEffect(() => {
     setLocal(existing);
@@ -43,14 +49,10 @@ export default function KeywordWidget({
     };
     setSnippets(updated);
 
-    // Example backend sync (JSON server or real API)
     try {
-      await axios.post("http://localhost:4000/snippets", {
-        keyword,
-        data: updated[keyword],
-      });
+      await saveSnippet(keyword, updated[keyword]);
     } catch (e) {
-      console.warn("API save failed (offline or dev mode)", e);
+      console.warn("API save failed", e);
     }
   };
 
@@ -60,11 +62,37 @@ export default function KeywordWidget({
     setSnippets(updated);
     onClose();
     try {
-      await axios.delete(
-        `http://localhost:4000/snippets/${encodeURIComponent(keyword)}`,
-      );
+      await deleteSnippet(keyword);
     } catch (e) {
       console.warn("API delete failed", e);
+    }
+  };
+
+  const handleSuggest = async () => {
+    try {
+      const suggestion = await generateSuggestion(keyword, local.example || local.definition || "");
+      setLocal((prev) => ({
+        ...prev,
+        definition: suggestion.definition || prev.definition,
+        example: suggestion.example || prev.example,
+      }));
+    } catch (e) {
+      console.warn("AI suggestion failed", e);
+    }
+  };
+
+  const handleAnalyze = async () => {
+    const text = [local.definition, local.example].filter(Boolean).join("\n");
+    if (!text.trim()) {
+      setAiSummary(null);
+      return;
+    }
+
+    try {
+      const analysis = await analyzeSnippetText(text);
+      setAiSummary(analysis);
+    } catch (e) {
+      console.warn("Text analytics failed", e);
     }
   };
 
@@ -95,7 +123,7 @@ export default function KeywordWidget({
         </button>
         <button
           onClick={handleSave}
-          className="px-2 py-1 rounded-md bg-brandLightBlue text-white hover:bg-blue-500"
+          className="px-2 py-1 rounded-md bg-lightblue-500 text-white hover:bg-blue-500"
         >
           ✎ Edit
         </button>
@@ -104,6 +132,18 @@ export default function KeywordWidget({
           className="px-2 py-1 rounded-md bg-red-600 text-white hover:bg-red-500"
         >
           🗑 Delete
+        </button>
+        <button
+          onClick={handleSuggest}
+          className="px-2 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-500"
+        >
+          AI Suggest
+        </button>
+        <button
+          onClick={handleAnalyze}
+          className="px-2 py-1 rounded-md bg-sky-700 text-white hover:bg-sky-600"
+        >
+          Analyze
         </button>
       </div>
 
@@ -160,6 +200,20 @@ export default function KeywordWidget({
             ))}
           </div>
         </div>
+
+        {aiSummary && (
+          <div>
+            <label className="block text-slate-300 mb-1">Text Analytics</label>
+            <div className="bg-slate-800 border border-slate-700 rounded-md p-2 text-[10px] text-slate-200">
+              <p>
+                Sentiment: {aiSummary.sentiment?.label || "unknown"}
+              </p>
+              <p className="mt-1 break-words">
+                Key Phrases: {(aiSummary.keyPhrases || []).join(", ") || "None"}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </motion.div>
   );
