@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "APPINSIGHTS_CONNECTION_STRING": "",
+    "KEY_VAULT_URL": "",
+    "SNIPPETS_BLOB_CONNECTION_STRING": "",
+    "SNIPPETS_BLOB_CONTAINER": "snippets",
+    "SNIPPETS_BLOB_NAME": "snippets.json",
+    "AZURE_OPENAI_ENDPOINT": "",
+    "AZURE_OPENAI_API_KEY": "",
+    "AZURE_OPENAI_DEPLOYMENT": "",
+    "AZURE_TEXT_ANALYTICS_ENDPOINT": "",
+    "AZURE_TEXT_ANALYTICS_API_KEY": ""
+  }
+}
