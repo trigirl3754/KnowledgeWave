@@ -2,6 +2,10 @@
 
 Note taking widget UI with a React frontend and Azure-backed API services.
 
+## Additional Documentation
+
+- Repository construction details: `REPO_CONSTRUCTION.md`
+
 ## Implemented Azure Service Integration
 
 This repository now includes implementation hooks for:
