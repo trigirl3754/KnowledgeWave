@@ -15,37 +15,91 @@ function cleanSentence(value) {
   return (value || "").replace(/\s+/g, " ").trim();
 }
 
-async function fetchDictionaryEntry(keyword) {
+function logEvent(level, event, data = {}) {
+  const payload = {
+    event,
+    ...data,
+  };
+
+  if (level === "error") {
+    console.error("[ai]", payload);
+    return;
+  }
+
+  if (level === "warn") {
+    console.warn("[ai]", payload);
+    return;
+  }
+
+  console.info("[ai]", payload);
+}
+
+async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   const encoded = encodeURIComponent((keyword || "").trim());
   if (!encoded) {
-    return null;
+    return {
+      result: null,
+      reason: "empty-keyword",
+    };
   }
 
   const configuredBase = await getConfigValue("FREE_DICTIONARY_API_BASE_URL");
   const baseUrl = (configuredBase || "https://api.dictionaryapi.dev/api/v2/entries/en")
     .replace(/\/$/, "");
 
+  logEvent("info", "dictionary.request.start", {
+    ...diagnostics,
+    keyword: cleanSentence(keyword),
+    baseUrl,
+  });
+
   let response;
   try {
     response = await fetch(`${baseUrl}/${encoded}`);
-  } catch {
-    return null;
+  } catch (error) {
+    logEvent("warn", "dictionary.request.network_error", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+      reason: error?.message || "unknown",
+    });
+    return {
+      result: null,
+      reason: "network-error",
+    };
   }
 
   if (!response.ok) {
-    return null;
+    logEvent("warn", "dictionary.request.http_error", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+      status: response.status,
+    });
+    return {
+      result: null,
+      reason: `http-${response.status}`,
+    };
   }
 
   let payload;
   try {
     payload = await response.json();
   } catch {
-    return null;
+    logEvent("warn", "dictionary.response.parse_error", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
+    return {
+      result: null,
+      reason: "invalid-json",
+    };
   }
 
   const entry = Array.isArray(payload) ? payload[0] : null;
   if (!entry || !Array.isArray(entry.meanings)) {
-    return null;
+    return {
+      result: null,
+      reason: "no-meanings",
+    };
   }
 
   for (const meaning of entry.meanings) {
@@ -63,6 +117,7 @@ async function fetchDictionaryEntry(keyword) {
     const dictionaryExample = cleanSentence(first?.example);
 
     return {
+      result: {
       definition: partOfSpeech
         ? `${definitionText} (${partOfSpeech})`
         : definitionText,
@@ -71,10 +126,15 @@ async function fetchDictionaryEntry(keyword) {
         `Example: The term \"${cleanSentence(keyword)}\" is used with this meaning in context-aware notes.`,
       source: "dictionary",
       provider: "dictionaryapi.dev",
+      },
+      reason: "success",
     };
   }
 
-  return null;
+  return {
+    result: null,
+    reason: "no-definitions",
+  };
 }
 
 function buildLocalSuggestion(keyword, context) {
@@ -125,19 +185,44 @@ async function getOpenAiClient() {
   return openAiClient;
 }
 
-async function suggestDefinition(keyword, context) {
+async function suggestDefinition(keyword, context, diagnostics = {}) {
   const provider = normalizeProvider(await getConfigValue("DEFINITION_PROVIDER"));
 
+  logEvent("info", "definition.provider.resolved", {
+    ...diagnostics,
+    keyword: cleanSentence(keyword),
+    provider,
+  });
+
   if (provider === "local") {
+    logEvent("info", "definition.provider.local", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
     return buildLocalSuggestion(keyword, context);
   }
 
   if (provider === "dictionary" || provider === "auto") {
-    const dictionaryResult = await fetchDictionaryEntry(keyword);
-    if (dictionaryResult) {
-      return dictionaryResult;
+    const dictionaryLookup = await fetchDictionaryEntry(keyword, diagnostics);
+    if (dictionaryLookup.result) {
+      logEvent("info", "dictionary.request.success", {
+        ...diagnostics,
+        keyword: cleanSentence(keyword),
+      });
+      return dictionaryLookup.result;
     }
+
+    logEvent("warn", "dictionary.request.unavailable", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+      reason: dictionaryLookup.reason,
+    });
+
     if (provider === "dictionary") {
+      logEvent("info", "definition.provider.dictionary_fallback_local", {
+        ...diagnostics,
+        keyword: cleanSentence(keyword),
+      });
       return buildLocalSuggestion(keyword, context);
     }
   }
@@ -145,11 +230,19 @@ async function suggestDefinition(keyword, context) {
   const deployment = await getConfigValue("AZURE_OPENAI_DEPLOYMENT");
   if (!deployment || provider === "openai" || provider === "auto") {
     if (!deployment) {
+      logEvent("warn", "openai.config.missing_deployment", {
+        ...diagnostics,
+        keyword: cleanSentence(keyword),
+      });
       return buildLocalSuggestion(keyword, context);
     }
   }
 
   if (!deployment) {
+    logEvent("warn", "openai.config.no_deployment", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
     return buildLocalSuggestion(keyword, context);
   }
 
@@ -157,6 +250,10 @@ async function suggestDefinition(keyword, context) {
   try {
     client = await getOpenAiClient();
   } catch {
+    logEvent("warn", "openai.client.unavailable", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
     return buildLocalSuggestion(keyword, context);
   }
 
@@ -180,11 +277,19 @@ async function suggestDefinition(keyword, context) {
       response_format: { type: "json_object" },
     });
   } catch {
+    logEvent("warn", "openai.request.failed", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
     return buildLocalSuggestion(keyword, context);
   }
 
   const message = completion.choices?.[0]?.message?.content;
   if (!message) {
+    logEvent("warn", "openai.response.empty", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
     return buildLocalSuggestion(keyword, context);
   }
 
@@ -197,6 +302,10 @@ async function suggestDefinition(keyword, context) {
       provider: "azure-openai",
     };
   } catch {
+    logEvent("warn", "openai.response.invalid_json", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
     return buildLocalSuggestion(keyword, context);
   }
 }

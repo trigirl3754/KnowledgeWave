@@ -11,6 +11,14 @@ function getKeywordParam(request) {
   return decodeURIComponent(request.params.keyword || "").trim();
 }
 
+function getRequestId(request) {
+  return (
+    request.headers.get("x-ms-request-id") ||
+    request.headers.get("x-request-id") ||
+    `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+  );
+}
+
 app.http("snippetsOptions", {
   methods: ["OPTIONS"],
   authLevel: "anonymous",
@@ -86,6 +94,8 @@ app.http("generateDefinition", {
   authLevel: "anonymous",
   route: "ai/definition",
   handler: async (request) => {
+    const requestId = getRequestId(request);
+
     let payload;
     try {
       payload = await request.json();
@@ -98,13 +108,35 @@ app.http("generateDefinition", {
       return json(400, { error: "keyword is required." });
     }
 
+    console.info("[api]", {
+      event: "definition.request.received",
+      requestId,
+      keyword,
+    });
+
     try {
       const suggestion = await suggestDefinition(
         keyword,
         payload.context || "",
+        { requestId },
       );
+
+      console.info("[api]", {
+        event: "definition.request.completed",
+        requestId,
+        keyword,
+        provider: suggestion.provider || "unknown",
+        source: suggestion.source || "unknown",
+      });
+
       return json(200, suggestion);
     } catch (error) {
+      console.error("[api]", {
+        event: "definition.request.failed",
+        requestId,
+        keyword,
+        error: error.message,
+      });
       return json(500, { error: error.message });
     }
   },

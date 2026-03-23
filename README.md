@@ -67,6 +67,20 @@ This repository now includes implementation hooks for:
 - If Azure OpenAI is unavailable, suggestion falls back to local generation so the button still returns content.
 - `Analyze` uses backend Text Analytics when configured.
 - If Text Analytics is unavailable, widget shows status and returns local fallback analysis.
+- `AI Suggest` now shows provider status in the widget (`dictionaryapi.dev`, `azure-openai`, or fallback modes).
+
+### Troubleshooting: dictionary API not accessed
+
+If AI Suggest is not using dictionary results:
+
+1. Confirm backend path is live by checking `POST /api/ai/definition` in browser devtools network tab.
+2. Inspect response JSON `provider` field:
+   - `dictionaryapi.dev` means dictionary was used.
+   - `azure-openai` means dictionary step did not return data and OpenAI was used.
+   - `local` means fallback was used.
+3. Check backend logs for `[ai]` dictionary events (`dictionary.request.start`, `dictionary.request.success`, `dictionary.request.unavailable`).
+4. Verify Key Vault `DEFINITION_PROVIDER` is `auto` or `dictionary` if you want dictionary-first behavior.
+5. Verify `FREE_DICTIONARY_API_BASE_URL` resolves to `https://api.dictionaryapi.dev/api/v2/entries/en`.
 
 ## Local Development
 

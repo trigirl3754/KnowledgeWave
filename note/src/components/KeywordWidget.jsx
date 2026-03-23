@@ -76,6 +76,7 @@ export default function KeywordWidget({
   snippets,
   setSnippets,
   onClose,
+  autoCaptureToken = 0,
 }) {
   const existing = useMemo(
     () =>
@@ -94,23 +95,28 @@ export default function KeywordWidget({
     type: "idle",
     message: "",
   });
+  const [suggestStatus, setSuggestStatus] = useState({
+    type: "idle",
+    message: "",
+  });
 
   useEffect(() => {
     setLocal(existing);
+    setSuggestStatus({ type: "idle", message: "" });
   }, [keyword, existing]); // when switching keywords
 
   const handleChange = (field, value) => {
     setLocal((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = async () => {
+  const persistSnapshot = async (snapshot, note = "Updated") => {
     const updated = {
       ...snippets,
       [keyword]: {
-        ...local,
+        ...snapshot,
         history: [
-          ...(local.history || []),
-          { ts: new Date().toISOString(), note: "Updated" },
+          ...(snapshot.history || []),
+          { ts: new Date().toISOString(), note },
         ],
       },
     };
@@ -121,6 +127,10 @@ export default function KeywordWidget({
     } catch (e) {
       console.warn("API save failed", e);
     }
+  };
+
+  const handleSave = async () => {
+    await persistSnapshot(local, "Updated");
   };
 
   const handleDelete = async () => {
@@ -137,6 +147,7 @@ export default function KeywordWidget({
 
   const handleSuggest = async () => {
     const context = local.example || local.definition || "";
+    setSuggestStatus({ type: "loading", message: "Generating suggestion..." });
 
     try {
       const suggestion = await generateSuggestion(keyword, context);
@@ -145,6 +156,15 @@ export default function KeywordWidget({
         definition: suggestion.definition || prev.definition,
         example: suggestion.example || prev.example,
       }));
+
+      const provider = suggestion.provider || "unknown";
+      const usedFallback = provider === "local";
+      setSuggestStatus({
+        type: usedFallback ? "warning" : "success",
+        message: usedFallback
+          ? "Suggestion generated from local fallback provider."
+          : `Suggestion generated using ${provider}.`,
+      });
     } catch (e) {
       console.warn("AI suggestion failed", e);
       const fallback = localSuggest(keyword, context);
@@ -153,6 +173,10 @@ export default function KeywordWidget({
         definition: fallback.definition || prev.definition,
         example: fallback.example || prev.example,
       }));
+      setSuggestStatus({
+        type: "warning",
+        message: "API request failed; showing browser fallback suggestion.",
+      });
     }
   };
 
@@ -186,6 +210,64 @@ export default function KeywordWidget({
       });
     }
   };
+
+  const handleAutoCapture = async () => {
+    const context = local.example || local.definition || "";
+    setSuggestStatus({
+      type: "loading",
+      message: "Generating suggestion and saving to glossary...",
+    });
+
+    let nextLocal = local;
+    let provider = "local";
+
+    try {
+      const suggestion = await generateSuggestion(keyword, context);
+      provider = suggestion.provider || "unknown";
+      nextLocal = {
+        ...local,
+        definition: suggestion.definition || local.definition,
+        example: suggestion.example || local.example,
+      };
+    } catch (e) {
+      console.warn("AI suggestion failed", e);
+      const fallback = localSuggest(keyword, context);
+      nextLocal = {
+        ...local,
+        definition: fallback.definition || local.definition,
+        example: fallback.example || local.example,
+      };
+    }
+
+    setLocal(nextLocal);
+    await persistSnapshot(nextLocal, "Quick capture saved");
+
+    const fallbackUsed = provider === "local";
+    setSuggestStatus({
+      type: fallbackUsed ? "warning" : "success",
+      message: fallbackUsed
+        ? "Saved to glossary using local fallback suggestion."
+        : `Saved to glossary using ${provider}.`,
+    });
+  };
+
+  useEffect(() => {
+    if (!autoCaptureToken) {
+      return;
+    }
+
+    let isActive = true;
+    (async () => {
+      if (!isActive) {
+        return;
+      }
+      await handleAutoCapture();
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [autoCaptureToken, keyword]);
 
   return (
     <motion.div
@@ -241,13 +323,26 @@ export default function KeywordWidget({
       {analyzeStatus.type !== "idle" && (
         <div
           className={`mb-3 rounded-md border px-2 py-1 text-[10px] ${analyzeStatus.type === "success"
-              ? "border-emerald-700 bg-emerald-900/30 text-emerald-200"
-              : analyzeStatus.type === "loading"
-                ? "border-sky-700 bg-sky-900/30 text-sky-200"
-                : "border-amber-700 bg-amber-900/30 text-amber-200"
+            ? "border-emerald-700 bg-emerald-900/30 text-emerald-200"
+            : analyzeStatus.type === "loading"
+              ? "border-sky-700 bg-sky-900/30 text-sky-200"
+              : "border-amber-700 bg-amber-900/30 text-amber-200"
             }`}
         >
           {analyzeStatus.message}
+        </div>
+      )}
+
+      {suggestStatus.type !== "idle" && (
+        <div
+          className={`mb-3 rounded-md border px-2 py-1 text-[10px] ${suggestStatus.type === "success"
+            ? "border-emerald-700 bg-emerald-900/30 text-emerald-200"
+            : suggestStatus.type === "loading"
+              ? "border-indigo-700 bg-indigo-900/30 text-indigo-200"
+              : "border-amber-700 bg-amber-900/30 text-amber-200"
+            }`}
+        >
+          {suggestStatus.message}
         </div>
       )}
 

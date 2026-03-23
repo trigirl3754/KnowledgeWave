@@ -10,14 +10,14 @@ function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function TermButton({ term, selectedKeyword, snippets, onSelect }) {
+function TermButton({ term, selectedKeyword, snippets, onQuickCapture }) {
     const isActive = selectedKeyword === term;
     const hasSnippet = Boolean(snippets[term]);
 
     return (
         <button
             type="button"
-            onClick={() => onSelect(term)}
+            onClick={() => onQuickCapture(term)}
             className={`mx-0.5 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] transition ${isActive
                 ? "border-brandLightBlue bg-brandLightBlue text-white"
                 : "border-slate-600 bg-slate-800 text-sky-200 hover:bg-slate-700"
@@ -35,7 +35,7 @@ export default function DocumentationColumn({
     snippets,
     keywords,
     onAddKeyword,
-    onSelect,
+    onQuickCapture,
 }) {
     const [docText, setDocText] = useState(() => {
         const stored = localStorage.getItem("documentationText");
@@ -169,7 +169,7 @@ export default function DocumentationColumn({
                             term={canonical}
                             selectedKeyword={selectedKeyword}
                             snippets={snippets}
-                            onSelect={onSelect}
+                            onQuickCapture={onQuickCapture}
                         />
                     );
                 })}
@@ -226,7 +226,7 @@ export default function DocumentationColumn({
                                 type="button"
                                 onClick={() => {
                                     onAddKeyword(term);
-                                    onSelect(term);
+                                    onQuickCapture(term);
                                 }}
                                 className="rounded-full border border-sky-600 bg-sky-900/40 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-800/60"
                             >

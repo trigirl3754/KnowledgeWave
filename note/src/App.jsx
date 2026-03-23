@@ -57,6 +57,10 @@ function mergeKeywords(existing, additional) {
 
 function App() {
   const [selectedKeyword, setSelectedKeyword] = useState(null);
+  const [autoCaptureRequest, setAutoCaptureRequest] = useState({
+    keyword: null,
+    token: 0,
+  });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileGlossaryOpen, setMobileGlossaryOpen] = useState(false);
   const [snippets, setSnippets] = useState(() => {
@@ -85,6 +89,28 @@ function App() {
     setKeywords((prev) => [...prev, value]);
     setSelectedKeyword(value);
     return true;
+  };
+
+  const handleQuickCapture = (rawKeyword) => {
+    const value = (rawKeyword || "").trim();
+    if (!value) {
+      return;
+    }
+
+    const existing = keywords.find(
+      (keyword) => keyword.toLowerCase() === value.toLowerCase(),
+    );
+
+    const canonical = existing || value;
+    if (!existing) {
+      setKeywords((prev) => mergeKeywords(prev, [canonical]));
+    }
+
+    setSelectedKeyword(canonical);
+    setAutoCaptureRequest({
+      keyword: canonical,
+      token: Date.now(),
+    });
   };
 
   useEffect(() => {
@@ -232,7 +258,7 @@ function App() {
               snippets={snippets}
               keywords={keywords}
               onAddKeyword={handleAddKeyword}
-              onSelect={setSelectedKeyword}
+              onQuickCapture={handleQuickCapture}
             />
 
             <div className="w-full xl:w-[56%] space-y-4">
@@ -260,6 +286,11 @@ function App() {
           snippets={snippets}
           setSnippets={setSnippets}
           onClose={() => setSelectedKeyword(null)}
+          autoCaptureToken={
+            autoCaptureRequest.keyword === selectedKeyword
+              ? autoCaptureRequest.token
+              : 0
+          }
         />
       )}
     </div>
