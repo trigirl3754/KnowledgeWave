@@ -1,0 +1,11 @@
+{
+  "name": "note-taking-widget-ui",
+  "private": true,
+  "scripts": {
+    "dev:azure": "npm --prefix note run dev:azure",
+    "dev": "npm --prefix note run dev",
+    "api": "npm --prefix api run start",
+    "build": "npm --prefix note run build",
+    "preview": "npm --prefix note run preview"
+  }
+}

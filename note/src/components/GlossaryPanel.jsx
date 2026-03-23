@@ -1,11 +1,31 @@
 import React from "react";
 
-export default function GlossaryPanel({ snippets }) {
+export default function GlossaryPanel({
+  snippets,
+  isOverlay = false,
+  onRequestClose,
+}) {
   const entries = Object.entries(snippets);
 
   return (
-    <aside className="w-72 bg-slate-900 border-l border-slate-800 p-4 hidden lg:flex flex-col">
-      <h3 className="text-sm font-semibold text-slate-200 mb-3">Glossary</h3>
+    <aside
+      className={`w-full xl:w-72 bg-slate-900 border-t xl:border-t-0 xl:border-l border-slate-800 p-4 flex flex-col ${
+        isOverlay ? "h-full max-h-none" : "max-h-[40vh] xl:max-h-none"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-slate-200">Glossary</h3>
+        {isOverlay && (
+          <button
+            type="button"
+            onClick={onRequestClose}
+            className="text-xs text-slate-400 hover:text-slate-100"
+            aria-label="Close glossary"
+          >
+            Close
+          </button>
+        )}
+      </div>
       <div className="space-y-2 overflow-auto text-[11px]">
         {entries.length === 0 && (
           <p className="text-slate-500 text-xs">

@@ -11,6 +11,8 @@
     "AZURE_OPENAI_ENDPOINT": "",
     "AZURE_OPENAI_API_KEY": "",
     "AZURE_OPENAI_DEPLOYMENT": "",
+    "DEFINITION_PROVIDER": "auto",
+    "FREE_DICTIONARY_API_BASE_URL": "https://api.dictionaryapi.dev/api/v2/entries/en",
     "AZURE_TEXT_ANALYTICS_ENDPOINT": "",
     "AZURE_TEXT_ANALYTICS_API_KEY": ""
   }

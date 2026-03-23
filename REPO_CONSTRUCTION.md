@@ -2,6 +2,19 @@
 
 This document explains how this repository was put together, what each part does, and how the system is wired across local development and Azure-backed services.
 
+## Quick Start
+
+1. Install dependencies:
+   - `cd note && npm install`
+   - `cd ../api && npm install`
+2. Start from repository root:
+   - `npm run dev:azure`
+3. Open `http://localhost:5173`.
+4. Verify workflow:
+   - click a term from Sidebar or Documentation,
+   - run `AI Suggest`, then `Analyze`,
+   - run `+ Add / Save` and confirm Glossary update.
+
 ## 1) High-level architecture
 
 This repository is split into two deployable parts:
@@ -23,8 +36,9 @@ The frontend talks to the backend over HTTP using `VITE_API_BASE_URL` (default: 
 - `src/main.jsx`: React entry point.
 - `src/App.jsx`: top-level composition and state synchronization.
 - `src/components/`: UI feature components:
-  - `Sidebar.jsx`: static keyword picker.
-  - `KeywordWidget.jsx`: edit/save/delete widget with AI actions.
+  - `Sidebar.jsx`: keyword picker with add-new-word input.
+  - `DocumentationColumn.jsx`: editable paragraph column with auto-linked keywords.
+  - `KeywordWidget.jsx`: edit/save/delete widget with AI suggest and analyze actions.
   - `GlossaryPanel.jsx`: summary cards from snippets.
   - `KnowledgeGraph.jsx`: visual keyword chip graph placeholder.
 - `src/config/api.js`: centralized API client wrapper.
@@ -54,40 +68,78 @@ The current repo reflects this construction pattern:
 2. Add Tailwind for utility-first styling and define brand palette extensions.
 3. Build a componentized layout:
    - left sidebar for keywords,
-   - center document/graph area,
+   - center documentation + workflow/graph area,
    - right glossary panel,
    - floating keyword widget for CRUD editing.
 4. Keep snippet state in frontend memory and localStorage for immediate UX continuity.
-5. Add a backend project under `api/` using Azure Functions (Node v4 model).
-6. Implement snippets endpoints (`GET`, `PUT`, `DELETE`) in `api/src/index.js`.
-7. Move snippet persistence to Azure Blob Storage via `api/src/storage.js`.
-8. Add cloud config strategy:
+5. Add dynamic keyword management (default terms + user-added terms + snippet-derived merge).
+6. Add Documentation column with:
+   - editable paragraph text stored in localStorage,
+   - auto-linking of known keywords in text,
+   - detected unknown term chips for one-click keyword addition.
+7. Add responsive shell behavior:
+   - desktop keeps fixed Sidebar + Glossary columns,
+   - mobile/tablet moves them into drawers opened by header controls,
+   - drawers support backdrop close and animated open/close transitions.
+8. Add a backend project under `api/` using Azure Functions (Node v4 model).
+9. Implement snippets endpoints (`GET`, `PUT`, `DELETE`) in `api/src/index.js`.
+10. Move snippet persistence to Azure Blob Storage via `api/src/storage.js`.
+11. Add cloud config strategy:
    - environment variables first,
    - then Azure Key Vault (`KEY_VAULT_URL`) fallback,
    - with in-process secret caching.
-9. Add AI-assisted features:
+12. Add AI-assisted features:
    - Azure OpenAI for suggested definition/example,
+   - dictionary-first provider option for authoritative definitions,
    - Text Analytics for sentiment and key phrase extraction.
-10. Add backend telemetry bootstrap for Application Insights.
-11. Add local developer scripts in `note/package.json`:
+13. Add fallback behavior so suggest/analyze still return local results when cloud services are unavailable.
+14. Add backend telemetry bootstrap for Application Insights.
+15. Add local developer scripts in `note/package.json`:
    - `dev:azure` to run frontend + Functions together,
    - `dev` for frontend + `json-server` mock mode.
+16. Add root-level `package.json` scripts so developers can run commands from repository root.
 
 ## 4) Frontend composition details
 
 `note/src/App.jsx` is the composition root:
 
 - Owns `selectedKeyword` and `snippets` state.
+- Owns dynamic `keywords` state used by Sidebar and Documentation linking.
+- Owns mobile drawer state for Sidebar and Glossary.
 - Hydrates snippets from localStorage on first render.
 - Persists snippets back to localStorage on change.
 - Fetches remote snippets on startup with `getSnippets()` and overlays local state if backend data is available.
+
+Responsive navigation behavior:
+
+- Desktop renders Sidebar and Glossary inline.
+- Mobile/tablet renders drawers opened from header buttons.
+- Drawers use animated transitions and backdrop close behavior.
+
+`note/src/components/Sidebar.jsx`:
+
+- Supports manual keyword creation from UI input.
+- Selects newly created keyword immediately so widget workflow is one click away.
+- Supports overlay mode with close action for mobile drawer usage.
+
+`note/src/components/DocumentationColumn.jsx`:
+
+- Renders editable paragraph content.
+- Persists documentation text in localStorage.
+- Auto-links known keywords in paragraph text to open widget on click.
+- Detects potential unknown terms and provides one-click `+ term` chips to add them into keyword state.
 
 `note/src/components/KeywordWidget.jsx` contains the main interaction logic:
 
 - Save: updates local state and calls `saveSnippet(keyword, payload)`.
 - Delete: removes local state and calls `deleteSnippet(keyword)`.
-- AI Suggest: calls `generateSuggestion(keyword, context)`.
-- Analyze: calls `analyzeSnippetText(text)` and renders sentiment/key phrases.
+- AI Suggest: calls `generateSuggestion(keyword, context)` with provider-mode behavior:
+   - `auto`: dictionary -> Azure OpenAI -> local fallback,
+   - `dictionary`: dictionary -> local fallback,
+   - `openai`: Azure OpenAI -> local fallback,
+   - `local`: local fallback only.
+- Analyze: calls `analyzeSnippetText(text)`, shows visible status, and falls back to local sentiment/key phrase heuristics if API fails.
+- Uses responsive positioning/sizing so the modal remains usable on small screens.
 
 The API wrapper in `note/src/config/api.js` centralizes:
 
@@ -125,8 +177,11 @@ Configuration layer (`api/src/config.js`):
 
 AI layer (`api/src/ai.js`):
 
-- Uses Azure OpenAI via the `openai` SDK configured with Azure deployment base URL.
+- Supports configurable definition providers via `DEFINITION_PROVIDER`.
+- Dictionary flow uses `dictionaryapi.dev` by default (configurable base URL).
+- OpenAI flow uses Azure OpenAI via the `openai` SDK configured with Azure deployment base URL.
 - Sends system instruction requiring JSON output with keys `definition` and `example`.
+- Falls back safely to local suggestion generation when selected providers are unavailable.
 
 Text analytics (`api/src/textAnalytics.js`):
 
@@ -142,7 +197,11 @@ Telemetry (`api/src/telemetry.js`):
 
 ### Preferred Azure-backed mode
 
-From `note/`:
+From repository root (recommended):
+
+1. `npm run dev:azure`
+
+Equivalent from `note/`:
 
 1. `npm install`
 2. In `api/`, run `npm install`
@@ -181,6 +240,8 @@ Expected settings (env or Key Vault where applicable):
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_DEPLOYMENT`
+- `DEFINITION_PROVIDER` (`auto` | `dictionary` | `openai` | `local`; default `auto`)
+- `FREE_DICTIONARY_API_BASE_URL` (default `https://api.dictionaryapi.dev/api/v2/entries/en`)
 - `AZURE_TEXT_ANALYTICS_ENDPOINT`
 - `AZURE_TEXT_ANALYTICS_API_KEY`
 - `APPINSIGHTS_CONNECTION_STRING` or `APPLICATIONINSIGHTS_CONNECTION_STRING`
@@ -189,18 +250,28 @@ Expected settings (env or Key Vault where applicable):
 ## 9) Runtime data flow
 
 1. User selects a keyword in the sidebar.
-2. `KeywordWidget` opens with current snippet data.
-3. Save/Delete operations update local state immediately.
-4. Frontend calls backend endpoints via `src/config/api.js`.
-5. Backend validates input and executes storage/AI operations.
-6. Blob JSON is updated and returned.
-7. Frontend panels (Glossary/Graph) rerender from shared `snippets` state.
+2. On small screens, user can first open Sidebar/Glossary via header drawer buttons.
+3. Or user clicks linked terms in Documentation column (or adds detected terms).
+4. `KeywordWidget` opens with current snippet data.
+5. `AI Suggest` fills definition/example (Azure-backed when available, local fallback otherwise).
+6. `Analyze` returns sentiment/key phrases (Azure-backed when available, local fallback otherwise).
+7. `+ Add / Save` updates local state immediately.
+8. Frontend calls backend endpoints via `src/config/api.js`.
+9. Backend validates input and executes storage/AI operations.
+10. Blob JSON is updated and returned.
+11. Frontend panels (Glossary/Graph) rerender from shared `snippets` state.
 
 ## 10) Design choices and tradeoffs
 
 - Chosen: localStorage + remote sync.
   - Benefit: resilient UX when API is down.
   - Tradeoff: potential stale local cache until refresh/sync.
+- Chosen: local fallback for AI suggest/analyze.
+  - Benefit: users always get visible output instead of silent failures.
+  - Tradeoff: fallback quality is heuristic and lower fidelity than cloud services.
+- Chosen: provider-based definition strategy (dictionary/OpenAI/local).
+   - Benefit: enables authoritative definitions while keeping contextual generation available.
+   - Tradeoff: external dictionary availability and response format can vary by provider.
 - Chosen: Azure Functions over always-on server.
   - Benefit: lower operational overhead for this workload.
   - Tradeoff: requires Functions local tooling and cloud-specific config.
@@ -212,6 +283,6 @@ Expected settings (env or Key Vault where applicable):
 
 - Add schema validation for snippet payloads shared by frontend/backend.
 - Add automated tests for API handlers and frontend API client.
-- Replace static sidebar keyword list with dynamic source.
+- Persist keyword list to backend/user profile for cross-device continuity.
 - Implement actual graph edges from snippet links/co-occurrence.
 - Add CI checks for lint/test/build across both apps.
