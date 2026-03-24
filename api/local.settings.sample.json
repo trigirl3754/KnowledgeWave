@@ -13,6 +13,9 @@
     "AZURE_OPENAI_DEPLOYMENT": "",
     "DEFINITION_PROVIDER": "auto",
     "FREE_DICTIONARY_API_BASE_URL": "https://api.dictionaryapi.dev/api/v2/entries/en",
+    "MCP_LEARN_ENDPOINT": "https://learn.microsoft.com/api/mcp",
+    "MCP_LEARN_API_KEY": "",
+    "MCP_LEARN_TIMEOUT_MS": "12000",
     "AZURE_TEXT_ANALYTICS_ENDPOINT": "",
     "AZURE_TEXT_ANALYTICS_API_KEY": ""
   }

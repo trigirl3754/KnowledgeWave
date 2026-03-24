@@ -23,11 +23,13 @@ Node.js Azure Functions backend for the note taking widget UI.
 - Secrets resolve from environment first, then Key Vault.
 - App Insights telemetry starts automatically when connection string is configured.
 - Definition provider behavior is controlled by `DEFINITION_PROVIDER`:
-	- `auto` (default): dictionary -> Azure OpenAI -> local fallback
+	- `auto` (default): dictionary -> MCP Learn -> Azure OpenAI -> local fallback
 	- `dictionary`: dictionary -> local fallback
+	- `mcp`: MCP Learn -> local fallback
 	- `openai`: Azure OpenAI -> local fallback
 	- `local`: local fallback only
 - Free dictionary base URL can be overridden with `FREE_DICTIONARY_API_BASE_URL`.
+- MCP Learn endpoint/key can be configured with `MCP_LEARN_ENDPOINT` and `MCP_LEARN_API_KEY`.
 
 ## Troubleshooting dictionary provider
 

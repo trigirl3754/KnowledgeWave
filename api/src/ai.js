@@ -5,7 +5,7 @@ let openAiClient;
 
 function normalizeProvider(rawValue) {
   const value = (rawValue || "auto").toString().trim().toLowerCase();
-  if (["dictionary", "openai", "local", "auto"].includes(value)) {
+  if (["dictionary", "mcp", "openai", "local", "auto"].includes(value)) {
     return value;
   }
   return "auto";
@@ -207,6 +207,154 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   };
 }
 
+function extractMcpSuggestion(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const directDefinition = cleanSentence(payload.definition);
+  const directExample = cleanSentence(payload.example);
+  if (directDefinition) {
+    return {
+      definition: directDefinition,
+      example:
+        directExample ||
+        `Example: ${cleanSentence(payload.keyword || "this concept")} is applied in this learning context.`,
+      source: cleanSentence(payload.source) || "mcp-learn",
+      provider: cleanSentence(payload.provider) || "mcp-learn",
+    };
+  }
+
+  if (payload.data && typeof payload.data === "object") {
+    const nestedDefinition = cleanSentence(payload.data.definition);
+    const nestedExample = cleanSentence(payload.data.example);
+    if (nestedDefinition) {
+      return {
+        definition: nestedDefinition,
+        example:
+          nestedExample ||
+          `Example: ${cleanSentence(payload.data.keyword || "this concept")} is applied in this learning context.`,
+        source: cleanSentence(payload.data.source) || "mcp-learn",
+        provider: cleanSentence(payload.data.provider) || "mcp-learn",
+      };
+    }
+  }
+
+  return null;
+}
+
+async function fetchMcpLearnSuggestion(keyword, context, diagnostics = {}) {
+  const endpoint = cleanSentence(await getConfigValue("MCP_LEARN_ENDPOINT"));
+  if (!endpoint) {
+    return {
+      result: null,
+      reason: "missing-endpoint",
+    };
+  }
+
+  const apiKey = cleanSentence(await getConfigValue("MCP_LEARN_API_KEY"));
+  const timeoutRaw = cleanSentence(await getConfigValue("MCP_LEARN_TIMEOUT_MS"));
+  const parsedTimeout = Number.parseInt(timeoutRaw || "12000", 10);
+  const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 12000;
+
+  const headers = {
+    "content-type": "application/json",
+  };
+
+  if (apiKey) {
+    headers.authorization = `Bearer ${apiKey}`;
+    headers["x-api-key"] = apiKey;
+  }
+
+  const requestBody = {
+    keyword: cleanSentence(keyword),
+    context: cleanSentence(context),
+    requestId: diagnostics.requestId,
+  };
+
+  logEvent("info", "mcp.request.start", {
+    ...diagnostics,
+    keyword: cleanSentence(keyword),
+    endpoint,
+    timeoutMs,
+  });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    const reason = error?.name === "AbortError" ? "timeout" : error?.message || "network-error";
+    logEvent("warn", "mcp.request.failed", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+      reason,
+    });
+    return {
+      result: null,
+      reason,
+    };
+  }
+
+  clearTimeout(timeout);
+
+  if (!response.ok) {
+    logEvent("warn", "mcp.request.http_error", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+      status: response.status,
+    });
+    return {
+      result: null,
+      reason: `http-${response.status}`,
+    };
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    logEvent("warn", "mcp.response.parse_error", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
+    return {
+      result: null,
+      reason: "invalid-json",
+    };
+  }
+
+  const suggestion = extractMcpSuggestion(payload);
+  if (!suggestion) {
+    logEvent("warn", "mcp.response.missing_fields", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+    });
+    return {
+      result: null,
+      reason: "missing-definition",
+    };
+  }
+
+  logEvent("info", "mcp.request.success", {
+    ...diagnostics,
+    keyword: cleanSentence(keyword),
+  });
+
+  return {
+    result: suggestion,
+    reason: "success",
+  };
+}
+
 function buildLocalSuggestion(keyword, context) {
   const cleanedKeyword = (keyword || "").trim();
   const cleanedContext = (context || "").replace(/\s+/g, " ").trim();
@@ -290,6 +438,27 @@ async function suggestDefinition(keyword, context, diagnostics = {}) {
 
     if (provider === "dictionary") {
       logEvent("info", "definition.provider.dictionary_fallback_local", {
+        ...diagnostics,
+        keyword: cleanSentence(keyword),
+      });
+      return buildLocalSuggestion(keyword, context);
+    }
+  }
+
+  if (provider === "mcp" || provider === "auto") {
+    const mcpLookup = await fetchMcpLearnSuggestion(keyword, context, diagnostics);
+    if (mcpLookup.result) {
+      return mcpLookup.result;
+    }
+
+    logEvent("warn", "mcp.request.unavailable", {
+      ...diagnostics,
+      keyword: cleanSentence(keyword),
+      reason: mcpLookup.reason,
+    });
+
+    if (provider === "mcp") {
+      logEvent("info", "definition.provider.mcp_fallback_local", {
         ...diagnostics,
         keyword: cleanSentence(keyword),
       });
