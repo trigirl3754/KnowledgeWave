@@ -134,3 +134,5 @@ If you later need AKS for advanced scaling or multi-service orchestration:
 5. Point frontend `VITE_API_BASE_URL` to the AKS ingress endpoint.
 
 This lets you start simple with Functions and move to AKS without changing frontend contracts.
+
+
