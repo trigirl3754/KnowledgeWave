@@ -1,0 +1,19 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "APPINSIGHTS_CONNECTION_STRING": "",
+    "KEY_VAULT_URL": "",
+    "SNIPPETS_BLOB_CONNECTION_STRING": "",
+    "SNIPPETS_BLOB_CONTAINER": "snippets",
+    "SNIPPETS_BLOB_NAME": "snippets.json",
+    "AZURE_OPENAI_ENDPOINT": "",
+    "AZURE_OPENAI_API_KEY": "",
+    "AZURE_OPENAI_DEPLOYMENT": "",
+    "DEFINITION_PROVIDER": "auto",
+    "FREE_DICTIONARY_API_BASE_URL": "https://api.dictionaryapi.dev/api/v2/entries/en",
+    "AZURE_TEXT_ANALYTICS_ENDPOINT": "",
+    "AZURE_TEXT_ANALYTICS_API_KEY": ""
+  }
+}

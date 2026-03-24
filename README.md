@@ -1,4 +1,4 @@
-# Knowledge Wave by WAVE AI Collaborators
+# Knowledge Wave
 
 Note taking widget UI with a React frontend and Azure-backed API services.
 
