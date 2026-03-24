@@ -23,3 +23,5 @@ node_modules/
 # Build output
 dist/
 build/
+api/node_modules/
+api/local.settings.json

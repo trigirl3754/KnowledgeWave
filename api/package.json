@@ -1,0 +1,23 @@
+{
+  "name": "note-azure-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "npx --no-install func start",
+    "test": "echo \"No tests configured\""
+  },
+  "dependencies": {
+    "@azure/ai-text-analytics": "^5.1.0",
+    "@azure/functions": "^4.8.0",
+    "@azure/identity": "^4.4.1",
+    "@azure/keyvault-secrets": "^4.8.0",
+    "@azure/storage-blob": "^12.26.0",
+    "applicationinsights": "^3.9.0",
+    "openai": "^4.80.0"
+  },
+  "devDependencies": {
+    "azure-functions-core-tools": "^4.8.0"
+  }
+}
