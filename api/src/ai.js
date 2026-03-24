@@ -34,23 +34,58 @@ function logEvent(level, event, data = {}) {
   console.info("[ai]", payload);
 }
 
-async function fetchDictionaryEntry(keyword, diagnostics = {}) {
-  const encoded = encodeURIComponent((keyword || "").trim());
-  if (!encoded) {
-    return {
-      result: null,
-      reason: "empty-keyword",
-    };
+function buildDictionaryCandidates(keyword) {
+  const cleaned = cleanSentence(keyword);
+  if (!cleaned) {
+    return [];
   }
 
-  const configuredBase = await getConfigValue("FREE_DICTIONARY_API_BASE_URL");
-  const baseUrl = (configuredBase || "https://api.dictionaryapi.dev/api/v2/entries/en")
-    .replace(/\/$/, "");
+  const noParen = cleanSentence(cleaned.replace(/\([^)]*\)/g, " "));
+  const normalized = cleanSentence(
+    noParen
+      .replace(/[-_/]/g, " ")
+      .replace(/[^A-Za-z0-9\s]/g, " "),
+  );
 
-  logEvent("info", "dictionary.request.start", {
+  const tokens = normalized
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4);
+
+  const prioritizedTokens = [];
+  if (tokens.length) {
+    // Try the semantic head and tail first (e.g., Retrieval Generation).
+    prioritizedTokens.push(tokens[tokens.length - 1], tokens[0]);
+    tokens.forEach((token) => prioritizedTokens.push(token));
+  }
+
+  const rawCandidates = [cleaned, noParen, normalized, ...prioritizedTokens];
+  const seen = new Set();
+
+  return rawCandidates
+    .map((value) => cleanSentence(value))
+    .filter((value) => {
+      if (!value) {
+        return false;
+      }
+
+      const key = value.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
+}
+
+async function fetchDictionaryCandidate(baseUrl, candidate, diagnostics = {}) {
+  const encoded = encodeURIComponent(candidate);
+
+  logEvent("info", "dictionary.request.attempt", {
     ...diagnostics,
-    keyword: cleanSentence(keyword),
-    baseUrl,
+    candidate,
   });
 
   let response;
@@ -59,7 +94,7 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   } catch (error) {
     logEvent("warn", "dictionary.request.network_error", {
       ...diagnostics,
-      keyword: cleanSentence(keyword),
+      candidate,
       reason: error?.message || "unknown",
     });
     return {
@@ -71,7 +106,7 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   if (!response.ok) {
     logEvent("warn", "dictionary.request.http_error", {
       ...diagnostics,
-      keyword: cleanSentence(keyword),
+      candidate,
       status: response.status,
     });
     return {
@@ -86,7 +121,7 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   } catch {
     logEvent("warn", "dictionary.response.parse_error", {
       ...diagnostics,
-      keyword: cleanSentence(keyword),
+      candidate,
     });
     return {
       result: null,
@@ -118,14 +153,14 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
 
     return {
       result: {
-      definition: partOfSpeech
-        ? `${definitionText} (${partOfSpeech})`
-        : definitionText,
-      example:
-        dictionaryExample ||
-        `Example: The term \"${cleanSentence(keyword)}\" is used with this meaning in context-aware notes.`,
-      source: "dictionary",
-      provider: "dictionaryapi.dev",
+        definition: partOfSpeech
+          ? `${definitionText} (${partOfSpeech})`
+          : definitionText,
+        example:
+          dictionaryExample ||
+          `Example: The term \"${candidate}\" is used with this meaning in context-aware notes.`,
+        source: "dictionary",
+        provider: "dictionaryapi.dev",
       },
       reason: "success",
     };
@@ -134,6 +169,41 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   return {
     result: null,
     reason: "no-definitions",
+  };
+}
+
+async function fetchDictionaryEntry(keyword, diagnostics = {}) {
+  const candidates = buildDictionaryCandidates(keyword);
+  if (!candidates.length) {
+    return {
+      result: null,
+      reason: "empty-keyword",
+    };
+  }
+
+  const configuredBase = await getConfigValue("FREE_DICTIONARY_API_BASE_URL");
+  const baseUrl = (configuredBase || "https://api.dictionaryapi.dev/api/v2/entries/en")
+    .replace(/\/$/, "");
+
+  logEvent("info", "dictionary.request.start", {
+    ...diagnostics,
+    keyword: cleanSentence(keyword),
+    baseUrl,
+    candidates,
+  });
+
+  let lastFailure = "unknown";
+  for (const candidate of candidates) {
+    const lookup = await fetchDictionaryCandidate(baseUrl, candidate, diagnostics);
+    if (lookup.result) {
+      return lookup;
+    }
+    lastFailure = lookup.reason;
+  }
+
+  return {
+    result: null,
+    reason: `exhausted-candidates:${lastFailure}`,
   };
 }
 
