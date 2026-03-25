@@ -29,6 +29,7 @@ Node.js Azure Functions backend for the note taking widget UI.
 	- `openai`: Azure OpenAI -> local fallback
 	- `local`: local fallback only
 - Free dictionary base URL can be overridden with `FREE_DICTIONARY_API_BASE_URL`.
+- Secondary dictionary fallback base URL can be overridden with `FREE_DICTIONARY_FALLBACK_BASE_URL`.
 - MCP Learn endpoint/key can be configured with `MCP_LEARN_ENDPOINT` and `MCP_LEARN_API_KEY`.
 - Azure Prompt Shields can be enabled for Azure OpenAI requests with `AZURE_OPENAI_PROMPT_SHIELDS_MODE`:
 	- `off`: no shield request settings sent.
@@ -51,9 +52,11 @@ The frontend is wired to stop local fallback in that case so blocked prompts sta
 2. Inspect `[ai]` log events:
 	- `definition.provider.resolved` for effective provider mode.
 	- `dictionary.request.start` and `dictionary.request.success` for successful dictionary use.
-	- `dictionary.request.unavailable` with reason when dictionary did not produce a result.
+	- `dictionary.request.primary_unavailable` when the primary dictionary source failed and fallback is attempted.
+	- `dictionary.request.unavailable` with reason when neither primary nor fallback dictionary source produced a result.
 3. If dictionary is skipped, check secret precedence:
 	- Runtime resolves environment values first, then Key Vault.
 	- `DEFINITION_PROVIDER=openai` or `local` will bypass dictionary-first behavior.
 4. Validate dictionary URL source:
 	- `FREE_DICTIONARY_API_BASE_URL` should be `https://api.dictionaryapi.dev/api/v2/entries/en` unless intentionally customized.
+	- `FREE_DICTIONARY_FALLBACK_BASE_URL` should be `https://api.datamuse.com/words` unless intentionally customized.

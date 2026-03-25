@@ -15,6 +15,7 @@
     "AZURE_OPENAI_PROMPT_SHIELDS_MODE": "off",
     "DEFINITION_PROVIDER": "auto",
     "FREE_DICTIONARY_API_BASE_URL": "https://api.dictionaryapi.dev/api/v2/entries/en",
+    "FREE_DICTIONARY_FALLBACK_BASE_URL": "https://api.datamuse.com/words",
     "MCP_LEARN_ENDPOINT": "https://learn.microsoft.com/api/mcp",
     "MCP_LEARN_API_KEY": "",
     "MCP_LEARN_TIMEOUT_MS": "12000",

@@ -232,6 +232,78 @@ async function fetchDictionaryCandidate(baseUrl, candidate, diagnostics = {}) {
   };
 }
 
+async function fetchFallbackDictionaryCandidate(baseUrl, candidate, diagnostics = {}) {
+  const encoded = encodeURIComponent(candidate);
+
+  logEvent("info", "dictionary.fallback.request.attempt", {
+    ...diagnostics,
+    candidate,
+  });
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}?sp=${encoded}&md=d&max=1`);
+  } catch (error) {
+    logEvent("warn", "dictionary.fallback.request.network_error", {
+      ...diagnostics,
+      candidate,
+      reason: error?.message || "unknown",
+    });
+    return {
+      result: null,
+      reason: "network-error",
+    };
+  }
+
+  if (!response.ok) {
+    logEvent("warn", "dictionary.fallback.request.http_error", {
+      ...diagnostics,
+      candidate,
+      status: response.status,
+    });
+    return {
+      result: null,
+      reason: `http-${response.status}`,
+    };
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    logEvent("warn", "dictionary.fallback.response.parse_error", {
+      ...diagnostics,
+      candidate,
+    });
+    return {
+      result: null,
+      reason: "invalid-json",
+    };
+  }
+
+  const first = Array.isArray(payload) ? payload[0] : null;
+  const defs = Array.isArray(first?.defs) ? first.defs : [];
+  const rawDefinition = defs[0] || "";
+  const definitionText = cleanSentence(rawDefinition.replace(/^[^\t]*\t/, ""));
+
+  if (!definitionText) {
+    return {
+      result: null,
+      reason: "no-definitions",
+    };
+  }
+
+  return {
+    result: {
+      definition: definitionText,
+      example: `Example: The term \"${candidate}\" is used with this meaning in context-aware notes.`,
+      source: "dictionary-fallback",
+      provider: "datamuse",
+    },
+    reason: "success",
+  };
+}
+
 async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   const candidates = buildDictionaryCandidates(keyword);
   if (!candidates.length) {
@@ -245,10 +317,15 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
   const baseUrl = (configuredBase || "https://api.dictionaryapi.dev/api/v2/entries/en")
     .replace(/\/$/, "");
 
+  const configuredFallbackBase = await getConfigValue("FREE_DICTIONARY_FALLBACK_BASE_URL");
+  const fallbackBaseUrl = (configuredFallbackBase || "https://api.datamuse.com/words")
+    .replace(/\/$/, "");
+
   logEvent("info", "dictionary.request.start", {
     ...diagnostics,
     keyword: cleanSentence(keyword),
     baseUrl,
+    fallbackBaseUrl,
     candidates,
   });
 
@@ -261,9 +338,28 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
     lastFailure = lookup.reason;
   }
 
+  logEvent("warn", "dictionary.request.primary_unavailable", {
+    ...diagnostics,
+    keyword: cleanSentence(keyword),
+    reason: lastFailure,
+  });
+
+  let fallbackFailure = "unknown";
+  for (const candidate of candidates) {
+    const lookup = await fetchFallbackDictionaryCandidate(
+      fallbackBaseUrl,
+      candidate,
+      diagnostics,
+    );
+    if (lookup.result) {
+      return lookup;
+    }
+    fallbackFailure = lookup.reason;
+  }
+
   return {
     result: null,
-    reason: `exhausted-candidates:${lastFailure}`,
+    reason: `exhausted-candidates:primary=${lastFailure};fallback=${fallbackFailure}`,
   };
 }
 
