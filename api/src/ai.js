@@ -1,7 +1,17 @@
 const { OpenAI } = require("openai");
 const { getConfigValue } = require("./config");
 
-let openAiClient;
+const openAiClients = new Map();
+
+class PromptShieldBlockedError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = "PromptShieldBlockedError";
+    this.code = "prompt_shield_blocked";
+    this.status = 422;
+    this.details = details;
+  }
+}
 
 function normalizeProvider(rawValue) {
   const value = (rawValue || "auto").toString().trim().toLowerCase();
@@ -9,6 +19,18 @@ function normalizeProvider(rawValue) {
     return value;
   }
   return "auto";
+}
+
+function normalizePromptShieldMode(rawValue) {
+  const value = (rawValue || "off").toString().trim().toLowerCase();
+  if (["off", "annotate", "block"].includes(value)) {
+    return value;
+  }
+  return "off";
+}
+
+function isPromptShieldEnabled(mode) {
+  return mode === "annotate" || mode === "block";
 }
 
 function cleanSentence(value) {
@@ -32,6 +54,44 @@ function logEvent(level, event, data = {}) {
   }
 
   console.info("[ai]", payload);
+}
+
+function buildPromptShieldConfig(mode) {
+  if (!isPromptShieldEnabled(mode)) {
+    return undefined;
+  }
+
+  return {
+    user_prompt: {
+      enabled: true,
+      action: mode,
+    },
+  };
+}
+
+function extractPromptShieldResult(completion) {
+  const promptResults = Array.isArray(completion?.prompt_filter_results)
+    ? completion.prompt_filter_results
+    : [];
+
+  for (const result of promptResults) {
+    const jailbreak = result?.content_filter_results?.jailbreak;
+    if (!jailbreak || typeof jailbreak !== "object") {
+      continue;
+    }
+
+    if (
+      typeof jailbreak.detected === "boolean" ||
+      typeof jailbreak.filtered === "boolean"
+    ) {
+      return {
+        detected: Boolean(jailbreak.detected),
+        filtered: Boolean(jailbreak.filtered),
+      };
+    }
+  }
+
+  return null;
 }
 
 function buildDictionaryCandidates(keyword) {
@@ -379,9 +439,18 @@ function buildLocalSuggestion(keyword, context) {
   };
 }
 
-async function getOpenAiClient() {
-  if (openAiClient) {
-    return openAiClient;
+async function getOpenAiApiVersion(promptShieldMode) {
+  const configuredVersion = cleanSentence(await getConfigValue("AZURE_OPENAI_API_VERSION"));
+  if (configuredVersion) {
+    return configuredVersion;
+  }
+
+  return isPromptShieldEnabled(promptShieldMode) ? "2024-10-01-preview" : "2024-10-21";
+}
+
+async function getOpenAiClient(apiVersion) {
+  if (openAiClients.has(apiVersion)) {
+    return openAiClients.get(apiVersion);
   }
 
   const endpoint = await getConfigValue("AZURE_OPENAI_ENDPOINT");
@@ -393,18 +462,22 @@ async function getOpenAiClient() {
     );
   }
 
-  openAiClient = new OpenAI({
+  const client = new OpenAI({
     apiKey,
     baseURL: `${endpoint.replace(/\/$/, "")}/openai/deployments`,
-    defaultQuery: { "api-version": "2024-10-21" },
+    defaultQuery: { "api-version": apiVersion },
     defaultHeaders: { "api-key": apiKey },
   });
 
-  return openAiClient;
+  openAiClients.set(apiVersion, client);
+  return client;
 }
 
 async function suggestDefinition(keyword, context, diagnostics = {}) {
   const provider = normalizeProvider(await getConfigValue("DEFINITION_PROVIDER"));
+  const promptShieldMode = normalizePromptShieldMode(
+    await getConfigValue("AZURE_OPENAI_PROMPT_SHIELDS_MODE"),
+  );
 
   logEvent("info", "definition.provider.resolved", {
     ...diagnostics,
@@ -486,8 +559,9 @@ async function suggestDefinition(keyword, context, diagnostics = {}) {
   }
 
   let client;
+  const apiVersion = await getOpenAiApiVersion(promptShieldMode);
   try {
-    client = await getOpenAiClient();
+    client = await getOpenAiClient(apiVersion);
   } catch {
     logEvent("warn", "openai.client.unavailable", {
       ...diagnostics,
@@ -498,7 +572,7 @@ async function suggestDefinition(keyword, context, diagnostics = {}) {
 
   let completion;
   try {
-    completion = await client.chat.completions.create({
+    const requestPayload = {
       model: deployment,
       temperature: 0.2,
       max_tokens: 180,
@@ -514,13 +588,55 @@ async function suggestDefinition(keyword, context, diagnostics = {}) {
         },
       ],
       response_format: { type: "json_object" },
-    });
-  } catch {
+    };
+
+    const promptShield = buildPromptShieldConfig(promptShieldMode);
+    if (promptShield) {
+      requestPayload.prompt_shield = promptShield;
+    }
+
+    completion = await client.chat.completions.create(requestPayload);
+  } catch (error) {
     logEvent("warn", "openai.request.failed", {
       ...diagnostics,
       keyword: cleanSentence(keyword),
+      reason: error?.message || "unknown",
     });
+
+    if (
+      isPromptShieldEnabled(promptShieldMode) &&
+      /jailbreak|prompt shield|prompt_shield|content filter/i.test(error?.message || "")
+    ) {
+      throw new PromptShieldBlockedError("Prompt blocked by Azure Prompt Shields.", {
+        action: promptShieldMode,
+        apiVersion,
+      });
+    }
+
     return buildLocalSuggestion(keyword, context);
+  }
+
+  const promptShieldResult = extractPromptShieldResult(completion);
+  if (promptShieldResult) {
+    logEvent(
+      promptShieldResult.filtered ? "warn" : "info",
+      "openai.prompt_shield.result",
+      {
+        ...diagnostics,
+        keyword: cleanSentence(keyword),
+        action: promptShieldMode,
+        detected: promptShieldResult.detected,
+        filtered: promptShieldResult.filtered,
+      },
+    );
+  }
+
+  if (promptShieldResult?.filtered) {
+    throw new PromptShieldBlockedError("Prompt blocked by Azure Prompt Shields.", {
+      action: promptShieldMode,
+      apiVersion,
+      ...promptShieldResult,
+    });
   }
 
   const message = completion.choices?.[0]?.message?.content;
@@ -539,6 +655,16 @@ async function suggestDefinition(keyword, context, diagnostics = {}) {
       example: parsed.example || "",
       source: "openai",
       provider: "azure-openai",
+      safety: promptShieldResult
+        ? {
+            promptShield: {
+              enabled: isPromptShieldEnabled(promptShieldMode),
+              action: promptShieldMode,
+              detected: promptShieldResult.detected,
+              filtered: promptShieldResult.filtered,
+            },
+          }
+        : undefined,
     };
   } catch {
     logEvent("warn", "openai.response.invalid_json", {
@@ -550,5 +676,6 @@ async function suggestDefinition(keyword, context, diagnostics = {}) {
 }
 
 module.exports = {
+  PromptShieldBlockedError,
   suggestDefinition,
 };

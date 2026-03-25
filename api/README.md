@@ -30,6 +30,20 @@ Node.js Azure Functions backend for the note taking widget UI.
 	- `local`: local fallback only
 - Free dictionary base URL can be overridden with `FREE_DICTIONARY_API_BASE_URL`.
 - MCP Learn endpoint/key can be configured with `MCP_LEARN_ENDPOINT` and `MCP_LEARN_API_KEY`.
+- Azure Prompt Shields can be enabled for Azure OpenAI requests with `AZURE_OPENAI_PROMPT_SHIELDS_MODE`:
+	- `off`: no shield request settings sent.
+	- `annotate`: request annotation metadata but do not block.
+	- `block`: block prompts flagged by Azure Prompt Shields.
+- `AZURE_OPENAI_API_VERSION` can be set explicitly if your deployment requires a preview API version for guardrails.
+
+## Prompt Shields behavior
+
+When `AZURE_OPENAI_PROMPT_SHIELDS_MODE=block` and Azure flags the prompt, the API returns:
+
+- HTTP `422`
+- JSON error code `prompt_shield_blocked`
+
+The frontend is wired to stop local fallback in that case so blocked prompts stay blocked.
 
 ## Troubleshooting dictionary provider
 

@@ -11,6 +11,8 @@
     "AZURE_OPENAI_ENDPOINT": "",
     "AZURE_OPENAI_API_KEY": "",
     "AZURE_OPENAI_DEPLOYMENT": "",
+    "AZURE_OPENAI_API_VERSION": "",
+    "AZURE_OPENAI_PROMPT_SHIELDS_MODE": "off",
     "DEFINITION_PROVIDER": "auto",
     "FREE_DICTIONARY_API_BASE_URL": "https://api.dictionaryapi.dev/api/v2/entries/en",
     "MCP_LEARN_ENDPOINT": "https://learn.microsoft.com/api/mcp",

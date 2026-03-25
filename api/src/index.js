@@ -136,7 +136,17 @@ app.http("generateDefinition", {
         requestId,
         keyword,
         error: error.message,
+        code: error.code,
       });
+
+      if (error.code === "prompt_shield_blocked") {
+        return json(error.status || 422, {
+          error: error.message,
+          code: error.code,
+          details: error.details || {},
+        });
+      }
+
       return json(500, { error: error.message });
     }
   },

@@ -12,15 +12,24 @@ async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
+    let code;
+    let details;
     try {
       const err = await response.json();
       if (err?.error) {
         message = err.error;
       }
+      code = err?.code;
+      details = err?.details;
     } catch {
       // Ignore JSON parse failures and keep the fallback message.
     }
-    throw new Error(message);
+
+    const error = new Error(message);
+    error.status = response.status;
+    error.code = code;
+    error.details = details;
+    throw error;
   }
 
   if (response.status === 204) {

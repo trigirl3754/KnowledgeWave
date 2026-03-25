@@ -115,11 +115,32 @@ Backend supports reading values from environment variables first, then Key Vault
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_DEPLOYMENT`
+- `AZURE_OPENAI_API_VERSION` (optional; defaults to `2024-10-21`, or `2024-10-01-preview` when Prompt Shields are enabled)
+- `AZURE_OPENAI_PROMPT_SHIELDS_MODE` (`off` | `annotate` | `block`; default `off`)
 - `DEFINITION_PROVIDER` (`auto` | `dictionary` | `openai` | `local`; default `auto`)
 - `FREE_DICTIONARY_API_BASE_URL` (default: `https://api.dictionaryapi.dev/api/v2/entries/en`)
 - `AZURE_TEXT_ANALYTICS_ENDPOINT`
 - `AZURE_TEXT_ANALYTICS_API_KEY`
 - `APPINSIGHTS_CONNECTION_STRING` (or `APPLICATIONINSIGHTS_CONNECTION_STRING`)
+
+## Prompt Shields
+
+This repo supports Azure Prompt Shields on `POST /api/ai/definition`.
+
+How it works:
+
+1. Prompt Shields are applied only on the backend Azure OpenAI request.
+2. Set `AZURE_OPENAI_PROMPT_SHIELDS_MODE` to:
+   - `off` to disable shields
+   - `annotate` to log detections without blocking
+   - `block` to prevent a suggestion from being generated
+3. When shields block a prompt, the API returns a dedicated error and the frontend does not fall back to a local suggestion.
+
+Azure requirements:
+
+1. Enable Prompt Shields / guardrails for the Azure OpenAI deployment in Azure AI Foundry.
+2. If your deployment requires a preview API version for guardrails, set `AZURE_OPENAI_API_VERSION` explicitly.
+3. Review backend logs for `openai.prompt_shield.result` events to confirm detections.
 
 ## AKS Readiness and Migration Path
 

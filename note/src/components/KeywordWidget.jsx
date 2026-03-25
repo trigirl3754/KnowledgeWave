@@ -71,6 +71,10 @@ function localAnalyze(text) {
   };
 }
 
+function isPromptShieldBlocked(error) {
+  return error?.code === "prompt_shield_blocked";
+}
+
 export default function KeywordWidget({
   keyword,
   snippets,
@@ -167,6 +171,15 @@ export default function KeywordWidget({
       });
     } catch (e) {
       console.warn("AI suggestion failed", e);
+
+      if (isPromptShieldBlocked(e)) {
+        setSuggestStatus({
+          type: "warning",
+          message: "Prompt blocked by Azure Prompt Shields. Revise the term or note text and try again.",
+        });
+        return;
+      }
+
       const fallback = localSuggest(keyword, context);
       setLocal((prev) => ({
         ...prev,
@@ -231,6 +244,15 @@ export default function KeywordWidget({
       };
     } catch (e) {
       console.warn("AI suggestion failed", e);
+
+      if (isPromptShieldBlocked(e)) {
+        setSuggestStatus({
+          type: "warning",
+          message: "Prompt blocked by Azure Prompt Shields. Revise the term or note text before saving.",
+        });
+        return;
+      }
+
       const fallback = localSuggest(keyword, context);
       nextLocal = {
         ...local,
