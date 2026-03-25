@@ -148,20 +148,26 @@ async function fetchDictionaryCandidate(baseUrl, candidate, diagnostics = {}) {
     candidate,
   });
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   let response;
   try {
-    response = await fetch(`${baseUrl}/${encoded}`);
+    response = await fetch(`${baseUrl}/${encoded}`, { signal: controller.signal });
   } catch (error) {
+    clearTimeout(timeout);
+    const reason = error?.name === "AbortError" ? "timeout" : error?.message || "network-error";
     logEvent("warn", "dictionary.request.network_error", {
       ...diagnostics,
       candidate,
-      reason: error?.message || "unknown",
+      reason,
     });
     return {
       result: null,
-      reason: "network-error",
+      reason,
     };
   }
+  clearTimeout(timeout);
 
   if (!response.ok) {
     logEvent("warn", "dictionary.request.http_error", {
@@ -233,27 +239,36 @@ async function fetchDictionaryCandidate(baseUrl, candidate, diagnostics = {}) {
 }
 
 async function fetchFallbackDictionaryCandidate(baseUrl, candidate, diagnostics = {}) {
-  const encoded = encodeURIComponent(candidate);
+  // Wiktionary REST API: GET <baseUrl>/<word>
+  // Only works for single-word lookups; skip multi-word candidates.
+  if (/\s/.test(candidate)) {
+    return { result: null, reason: "multi-word-skipped" };
+  }
+
+  const encoded = encodeURIComponent(candidate.toLowerCase());
 
   logEvent("info", "dictionary.fallback.request.attempt", {
     ...diagnostics,
     candidate,
   });
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   let response;
   try {
-    response = await fetch(`${baseUrl}?sp=${encoded}&md=d&max=1`);
+    response = await fetch(`${baseUrl}/${encoded}`, { signal: controller.signal });
   } catch (error) {
+    clearTimeout(timeout);
+    const reason = error?.name === "AbortError" ? "timeout" : error?.message || "network-error";
     logEvent("warn", "dictionary.fallback.request.network_error", {
       ...diagnostics,
       candidate,
-      reason: error?.message || "unknown",
+      reason,
     });
-    return {
-      result: null,
-      reason: "network-error",
-    };
+    return { result: null, reason };
   }
+  clearTimeout(timeout);
 
   if (!response.ok) {
     logEvent("warn", "dictionary.fallback.request.http_error", {
@@ -261,10 +276,7 @@ async function fetchFallbackDictionaryCandidate(baseUrl, candidate, diagnostics 
       candidate,
       status: response.status,
     });
-    return {
-      result: null,
-      reason: `http-${response.status}`,
-    };
+    return { result: null, reason: `http-${response.status}` };
   }
 
   let payload;
@@ -275,33 +287,35 @@ async function fetchFallbackDictionaryCandidate(baseUrl, candidate, diagnostics 
       ...diagnostics,
       candidate,
     });
-    return {
-      result: null,
-      reason: "invalid-json",
-    };
+    return { result: null, reason: "invalid-json" };
   }
 
-  const first = Array.isArray(payload) ? payload[0] : null;
-  const defs = Array.isArray(first?.defs) ? first.defs : [];
-  const rawDefinition = defs[0] || "";
-  const definitionText = cleanSentence(rawDefinition.replace(/^[^\t]*\t/, ""));
-
-  if (!definitionText) {
-    return {
-      result: null,
-      reason: "no-definitions",
-    };
+  // Wiktionary response: { "en": [{ "partOfSpeech": "Noun", "definitions": [{ "definition": "...", "examples": [...] }] }] }
+  const entries = Array.isArray(payload?.en) ? payload.en : [];
+  for (const entry of entries) {
+    const defs = Array.isArray(entry.definitions) ? entry.definitions : [];
+    for (const def of defs) {
+      const definitionText = cleanSentence((def.definition || "").replace(/<[^>]+>/g, ""));
+      if (!definitionText) {
+        continue;
+      }
+      const rawExample = Array.isArray(def.examples) ? def.examples[0] || "" : "";
+      const exampleText = cleanSentence(rawExample.replace(/<[^>]+>/g, ""));
+      return {
+        result: {
+          definition: definitionText,
+          example:
+            exampleText ||
+            `Example: The term \"${candidate}\" is used with this meaning in context-aware notes.`,
+          source: "dictionary-fallback",
+          provider: "wiktionary",
+        },
+        reason: "success",
+      };
+    }
   }
 
-  return {
-    result: {
-      definition: definitionText,
-      example: `Example: The term \"${candidate}\" is used with this meaning in context-aware notes.`,
-      source: "dictionary-fallback",
-      provider: "datamuse",
-    },
-    reason: "success",
-  };
+  return { result: null, reason: "no-definitions" };
 }
 
 async function fetchDictionaryEntry(keyword, diagnostics = {}) {
@@ -318,7 +332,7 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
     .replace(/\/$/, "");
 
   const configuredFallbackBase = await getConfigValue("FREE_DICTIONARY_FALLBACK_BASE_URL");
-  const fallbackBaseUrl = (configuredFallbackBase || "https://api.datamuse.com/words")
+  const fallbackBaseUrl = (configuredFallbackBase || "https://en.wiktionary.org/api/rest_v1/page/definition")
     .replace(/\/$/, "");
 
   logEvent("info", "dictionary.request.start", {

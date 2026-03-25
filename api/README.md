@@ -59,4 +59,4 @@ The frontend is wired to stop local fallback in that case so blocked prompts sta
 	- `DEFINITION_PROVIDER=openai` or `local` will bypass dictionary-first behavior.
 4. Validate dictionary URL source:
 	- `FREE_DICTIONARY_API_BASE_URL` should be `https://api.dictionaryapi.dev/api/v2/entries/en` unless intentionally customized.
-	- `FREE_DICTIONARY_FALLBACK_BASE_URL` should be `https://api.datamuse.com/words` unless intentionally customized.
+	- `FREE_DICTIONARY_FALLBACK_BASE_URL` should be `https://en.wiktionary.org/api/rest_v1/page/definition` unless intentionally customized.

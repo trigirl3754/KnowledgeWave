@@ -119,7 +119,7 @@ Backend supports reading values from environment variables first, then Key Vault
 - `AZURE_OPENAI_PROMPT_SHIELDS_MODE` (`off` | `annotate` | `block`; default `off`)
 - `DEFINITION_PROVIDER` (`auto` | `dictionary` | `openai` | `local`; default `auto`)
 - `FREE_DICTIONARY_API_BASE_URL` (default: `https://api.dictionaryapi.dev/api/v2/entries/en`)
-- `FREE_DICTIONARY_FALLBACK_BASE_URL` (default: `https://api.datamuse.com/words`)
+- `FREE_DICTIONARY_FALLBACK_BASE_URL` (default: `https://en.wiktionary.org/api/rest_v1/page/definition`)
 - `AZURE_TEXT_ANALYTICS_ENDPOINT`
 - `AZURE_TEXT_ANALYTICS_API_KEY`
 - `APPINSIGHTS_CONNECTION_STRING` (or `APPLICATIONINSIGHTS_CONNECTION_STRING`)
