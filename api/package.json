@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "src/index.js",
   "scripts": {
-    "start": "npx --no-install func start",
+    "start": "npx --no-install func start --port 7072",
     "test": "echo \"No tests configured\""
   },
   "dependencies": {
