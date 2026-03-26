@@ -153,7 +153,12 @@ async function fetchDictionaryCandidate(baseUrl, candidate, diagnostics = {}) {
 
   let response;
   try {
-    response = await fetch(`${baseUrl}/${encoded}`, { signal: controller.signal });
+    response = await fetch(`${baseUrl}/${encoded}`, {
+      signal: controller.signal,
+      headers: {
+        accept: "application/json",
+      },
+    });
   } catch (error) {
     clearTimeout(timeout);
     const reason = error?.name === "AbortError" ? "timeout" : error?.message || "network-error";
@@ -257,7 +262,12 @@ async function fetchFallbackDictionaryCandidate(baseUrl, candidate, diagnostics 
 
   let response;
   try {
-    response = await fetch(`${baseUrl}/${encoded}`, { signal: controller.signal });
+    response = await fetch(`${baseUrl}/${encoded}`, {
+      signal: controller.signal,
+      headers: {
+        accept: "application/json",
+      },
+    });
   } catch (error) {
     clearTimeout(timeout);
     const reason = error?.name === "AbortError" ? "timeout" : error?.message || "network-error";
@@ -327,11 +337,13 @@ async function fetchDictionaryEntry(keyword, diagnostics = {}) {
     };
   }
 
-  const configuredBase = await getConfigValue("FREE_DICTIONARY_API_BASE_URL");
+  const configuredBase = cleanSentence(await getConfigValue("FREE_DICTIONARY_API_BASE_URL"));
   const baseUrl = (configuredBase || "https://api.dictionaryapi.dev/api/v2/entries/en")
     .replace(/\/$/, "");
 
-  const configuredFallbackBase = await getConfigValue("FREE_DICTIONARY_FALLBACK_BASE_URL");
+  const configuredFallbackBase = cleanSentence(
+    await getConfigValue("FREE_DICTIONARY_FALLBACK_BASE_URL"),
+  );
   const fallbackBaseUrl = (configuredFallbackBase || "https://en.wiktionary.org/api/rest_v1/page/definition")
     .replace(/\/$/, "");
 
