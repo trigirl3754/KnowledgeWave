@@ -1,3 +1,5 @@
+<img width="1408" height="768" alt="image_e81b6072" src="https://github.com/user-attachments/assets/1f9b1927-ed13-4967-8eba-7f28984a73a0" />
+
 # Knowledge Wave
 
 Note taking widget UI with a React frontend and Azure-backed API services.
